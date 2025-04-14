@@ -18,6 +18,8 @@ from langchain_community.vectorstores import FAISS
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+import gc
+import io
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -51,6 +53,11 @@ qa_chain = None
 chat_chain = None
 memory = None
 
+# Add these constants at the top
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB limit for free tier
+CHUNK_SIZE = 2000  # Smaller chunk size for text splitting
+MAX_CHUNKS = 50  # Limit total chunks to prevent memory issues
+
 
 def initialize_llm():
     global llm
@@ -80,7 +87,7 @@ def initialize_general_chat():
 
     # Create chat prompt template with clear instructions
     chat_prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a helpful AI assistant. Provide concise and accurate responses."),
+        ("system", "You are a direct and efficient AI assistant. Provide brief, accurate responses without unnecessary explanations."),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}")
     ])
@@ -128,94 +135,131 @@ async def upload_file(file: UploadFile = File(...)):
     global qa_chain, chat_chain, memory, llm
 
     try:
-        # Clear existing chains and memory first
-        qa_chain = None
-        chat_chain = None
-        memory = None
+        # Check file size first
+        file_size = 0
+        file_contents = bytearray()
+
+        # Read file in chunks to check size
+        while chunk := await file.read(8192):
+            file_size += len(chunk)
+            if file_size > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File too large. Maximum size is {MAX_FILE_SIZE/1024/1024}MB"
+                )
+            file_contents.extend(chunk)
 
         filename = file.filename.lower()
         ext = os.path.splitext(filename)[1]
-        allowed_extensions = [".txt", ".pdf", ".docx"]
 
-        if ext not in allowed_extensions:
+        if ext not in [".txt", ".pdf", ".docx"]:
             raise HTTPException(
                 status_code=400,
-                detail=f"Unsupported file type. Allowed types: {allowed_extensions}"
+                detail="Only .txt, .pdf, and .docx files are supported"
             )
 
-        file_bytes = await file.read()
-
         # Extract text based on file type
-        if ext == ".txt":
-            file_contents = file_bytes.decode("utf-8")
-        elif ext == ".pdf":
-            from io import BytesIO
-            pdf_buffer = BytesIO(file_bytes)
-            file_contents = extract_text_from_pdf(pdf_buffer)
-        elif ext == ".docx":
-            file_contents = extract_text_from_docx(file_bytes)
+        try:
+            if ext == ".txt":
+                text_content = file_contents.decode("utf-8")
+            elif ext == ".pdf":
+                pdf_buffer = io.BytesIO(file_contents)
+                text_content = extract_text_from_pdf(pdf_buffer)
+            elif ext == ".docx":
+                text_content = extract_text_from_docx(file_contents)
+        except Exception as e:
+            logger.error(f"Error extracting text: {str(e)}")
+            raise HTTPException(
+                status_code=400,
+                detail="Could not extract text from file"
+            )
 
-        # Initialize LLM if not already initialized
+        # Clear memory
+        gc.collect()
+
+        # Initialize LLM if needed
         if llm is None:
             initialize_llm()
 
-        # Initialize new memory
+        # Reset chains and memory
+        qa_chain = None
+        chat_chain = None
         memory = ConversationBufferMemory(
             memory_key="chat_history",
             return_messages=True
         )
 
-        # Split text into chunks
+        # Split text with smaller chunks
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=50
+            chunk_size=CHUNK_SIZE,
+            chunk_overlap=200,
+            length_function=len,
         )
-        texts = splitter.split_text(file_contents)
+        texts = splitter.split_text(text_content)
+
+        # Limit number of chunks
+        if len(texts) > MAX_CHUNKS:
+            texts = texts[:MAX_CHUNKS]
+            logger.warning(
+                f"Document too large, using first {MAX_CHUNKS} chunks")
+
+        # Clear original content to free memory
+        text_content = None
+        file_contents = None
+        gc.collect()
 
         if not texts:
             raise HTTPException(
                 status_code=400,
-                detail="No text content could be extracted from the file"
+                detail="No text content could be extracted"
             )
 
         # Create embeddings and vector store
-        embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-        vector_store = FAISS.from_texts(texts, embedding_model)
+        embedding_model = HuggingFaceEmbeddings(
+            model_name="all-MiniLM-L6-v2",
+            model_kwargs={'device': 'cpu'}  # Force CPU usage
+        )
 
-        # Create QA chain with proper memory initialization
+        # Create vector store in smaller batches
+        vector_store = FAISS.from_texts(
+            texts,
+            embedding_model,
+            batch_size=32  # Smaller batch size
+        )
+
+        # Clear texts to free memory
+        texts = None
+        gc.collect()
+
+        # Create QA chain with memory-efficient settings
         qa_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
-            retriever=vector_store.as_retriever(search_kwargs={"k": 3}),
-            memory=ConversationBufferMemory(
-                memory_key="chat_history",
-                return_messages=True,
-                output_key="answer"
+            retriever=vector_store.as_retriever(
+                search_kwargs={"k": 2}  # Reduce number of retrieved documents
             ),
+            memory=memory,
             return_source_documents=True,
             combine_docs_chain_kwargs={
                 "prompt": PromptTemplate(
-                    template="""Use the following pieces of context to answer the question. Base your answer ONLY on the provided context. If you don't find the answer in the context, say "I don't find this information in the provided document."
+                    template="""Based on the provided context, give a clear answer with a brief explanation. If the information isn't in the context, state "Information not found in document."
 
-                    Context: {context}
+Context: {context}
 
-                    Question: {question}
+Question: {question}
 
-                    Answer: """,
+Answer: Let me explain based on the document:""",
                     input_variables=["context", "question"]
                 )
             }
         )
 
-        # Disable chat_chain when document mode is active
-        chat_chain = None
-
-        return {"message": "File processed and QA chain is ready", "mode": "document"}
+        return {"message": "File processed successfully", "mode": "document"}
 
     except Exception as e:
         logger.error(f"Error in upload_file: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing file: {str(e)}"
+            detail=str(e)
         )
 
 
@@ -272,55 +316,72 @@ def get_current_mode() -> str:
 
 @app.post("/chat")
 async def chat_endpoint(chat_request: ChatRequest):
-    global qa_chain, chat_chain, llm
-
     try:
+        if not chat_request.question.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Question cannot be empty"
+            )
+
         if not llm:
             initialize_llm()
 
-        # Check if we're in document mode
         if qa_chain:
+            # Document mode
             try:
-                # Use document QA chain
                 result = qa_chain.invoke({
                     "question": chat_request.question,
-                    "chat_history": memory.chat_memory.messages if memory else []
+                    # Keep only last 4 messages
+                    "chat_history": memory.chat_memory.messages[-4:] if memory else []
                 })
 
                 answer = result.get("answer", "")
+
+                # Only search real-time if needed
                 if "don't find this information" in answer.lower():
                     realtime_info = get_realtime_search_results(
-                        chat_request.question)
+                        chat_request.question,
+                        max_results=2  # Reduce number of results
+                    )
                     if realtime_info and realtime_info != "Unable to fetch real-time information at the moment.":
                         answer += f"\n\nHowever, here is some relevant information from real-time sources:\n{realtime_info}"
+
+                # Clear some memory
+                gc.collect()
 
                 return {
                     "answer": answer,
                     "mode": "document",
                     "realtime_search": "don't find this information" in answer.lower()
                 }
+
             except Exception as e:
                 logger.error(f"Error in QA chain: {str(e)}")
                 raise HTTPException(
                     status_code=500,
                     detail="Error processing document-based response"
                 )
+
         else:
-            # Initialize general chat if no document is loaded
+            # General chat mode
             if chat_chain is None:
                 initialize_general_chat()
 
-            # Limit chat history to last 5 messages before processing
-            if memory and len(memory.chat_memory.messages) > 10:
-                memory.chat_memory.messages = memory.chat_memory.messages[-5:]
+            realtime_info = get_realtime_search_results(
+                chat_request.question,
+                max_results=2  # Reduce number of results
+            )
 
-            # Include chat history context in the prompt
-            chat_history = memory.chat_memory.messages if memory else []
-            realtime_info = get_realtime_search_results(chat_request.question)
+            prompt = f"""Question: {chat_request.question}
 
-            result = chat_chain.invoke({
-                "input": f"Previous context: {chat_history}\n\nCurrent question: {chat_request.question}\n\nAvailable real-time information: {realtime_info}"
-            })
+Real-time information: {realtime_info}
+
+Please provide a concise answer incorporating both your knowledge and the real-time information when relevant."""
+
+            result = chat_chain.invoke({"input": prompt})
+
+            # Clear some memory
+            gc.collect()
 
             return {
                 "answer": result["text"],
@@ -332,7 +393,7 @@ async def chat_endpoint(chat_request: ChatRequest):
         logger.error(f"Error in chat endpoint: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing request: {str(e)}"
+            detail=str(e)
         )
 
 
@@ -377,6 +438,20 @@ async def get_mode():
     elif chat_chain is not None:
         return {"mode": "chat"}
     return {"mode": "none"}
+
+# Add memory cleanup endpoint
+
+
+@app.post("/cleanup")
+async def cleanup_memory():
+    """Manually trigger memory cleanup"""
+    global qa_chain, chat_chain, memory, llm
+    qa_chain = None
+    chat_chain = None
+    memory = None
+    llm = None
+    gc.collect()
+    return {"message": "Memory cleaned up"}
 
 if __name__ == "__main__":
     import uvicorn
