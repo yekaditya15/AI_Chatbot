@@ -54,9 +54,10 @@ chat_chain = None
 memory = None
 
 # Add these constants at the top
-MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB limit for free tier
-CHUNK_SIZE = 2000  # Smaller chunk size for text splitting
-MAX_CHUNKS = 50  # Limit total chunks to prevent memory issues
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB limit
+CHUNK_SIZE = 1000  # Reduced chunk size
+CHUNK_OVERLAP = 100  # Reduced overlap
+MAX_CHUNKS = 30  # Reduced max chunks
 
 
 def initialize_llm():
@@ -135,132 +136,56 @@ async def upload_file(file: UploadFile = File(...)):
     global qa_chain, chat_chain, memory, llm
 
     try:
-        # Check file size first
+        # Stream file in chunks instead of loading entirely into memory
         file_size = 0
-        file_contents = bytearray()
-
-        # Read file in chunks to check size
-        while chunk := await file.read(8192):
+        text_content = ""
+        chunk = await file.read(8192)
+        while chunk:
             file_size += len(chunk)
             if file_size > MAX_FILE_SIZE:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"File too large. Maximum size is {MAX_FILE_SIZE/1024/1024}MB"
-                )
-            file_contents.extend(chunk)
+                raise HTTPException(status_code=413, detail="File too large")
+            if file.filename.endswith('.txt'):
+                text_content += chunk.decode('utf-8')
+            chunk = await file.read(8192)
 
-        filename = file.filename.lower()
-        ext = os.path.splitext(filename)[1]
-
-        if ext not in [".txt", ".pdf", ".docx"]:
-            raise HTTPException(
-                status_code=400,
-                detail="Only .txt, .pdf, and .docx files are supported"
-            )
-
-        # Extract text based on file type
-        try:
-            if ext == ".txt":
-                text_content = file_contents.decode("utf-8")
-            elif ext == ".pdf":
-                pdf_buffer = io.BytesIO(file_contents)
-                text_content = extract_text_from_pdf(pdf_buffer)
-            elif ext == ".docx":
-                text_content = extract_text_from_docx(file_contents)
-        except Exception as e:
-            logger.error(f"Error extracting text: {str(e)}")
-            raise HTTPException(
-                status_code=400,
-                detail="Could not extract text from file"
-            )
-
-        # Clear memory
-        gc.collect()
-
-        # Initialize LLM if needed
-        if llm is None:
-            initialize_llm()
-
-        # Reset chains and memory
-        qa_chain = None
-        chat_chain = None
-        memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True
-        )
-
-        # Split text with smaller chunks
+        # Use smaller chunks and batch processing
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=CHUNK_SIZE,
-            chunk_overlap=200,
+            chunk_overlap=CHUNK_OVERLAP,
             length_function=len,
         )
         texts = splitter.split_text(text_content)
 
-        # Limit number of chunks
         if len(texts) > MAX_CHUNKS:
             texts = texts[:MAX_CHUNKS]
-            logger.warning(
-                f"Document too large, using first {MAX_CHUNKS} chunks")
 
-        # Clear original content to free memory
-        text_content = None
-        file_contents = None
-        gc.collect()
-
-        if not texts:
-            raise HTTPException(
-                status_code=400,
-                detail="No text content could be extracted"
-            )
-
-        # Create embeddings and vector store
+        # Process embeddings in smaller batches
         embedding_model = HuggingFaceEmbeddings(
             model_name="all-MiniLM-L6-v2",
-            model_kwargs={'device': 'cpu'}  # Force CPU usage
+            model_kwargs={'device': 'cpu'}
         )
 
-        # Create vector store in smaller batches
+        # Create vector store with smaller batch size
         vector_store = FAISS.from_texts(
             texts,
             embedding_model,
-            batch_size=32  # Smaller batch size
+            batch_size=16  # Smaller batch size
         )
 
-        # Clear texts to free memory
-        texts = None
-        gc.collect()
-
-        # Create QA chain with memory-efficient settings
+        # Configure QA chain with more efficient settings
         qa_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
-            retriever=vector_store.as_retriever(
-                search_kwargs={"k": 2}  # Reduce number of retrieved documents
-            ),
+            retriever=vector_store.as_retriever(search_kwargs={"k": 2}),
             memory=memory,
             return_source_documents=True,
-            combine_docs_chain_kwargs={
-                "prompt": PromptTemplate(
-                    template="""Based on the provided context, give a clear answer with a brief explanation. If the information isn't in the context, state "Information not found in document."
-
-Context: {context}
-
-Question: {question}
-
-Answer: Let me explain based on the document:""",
-                    input_variables=["context", "question"]
-                )
-            }
+            verbose=False  # Reduce logging
         )
 
         return {"message": "File processed successfully", "mode": "document"}
 
     except Exception as e:
-        logger.error(f"Error in upload_file: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
+        logger.error(f"Upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class ChatRequest(BaseModel):
