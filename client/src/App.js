@@ -22,6 +22,36 @@ import {
   SmartToy as SmartToyIcon,
   Delete as DeleteIcon,
 } from "@mui/icons-material";
+import { styled } from "@mui/material/styles";
+
+const LoadingAnimation = styled("div")`
+  display: inline-flex;
+  gap: 4px;
+
+  & span {
+    width: 8px;
+    height: 8px;
+    background-color: ${(props) => props.theme.palette.text.primary};
+    border-radius: 50%;
+    animation: bounce 0.5s alternate infinite;
+
+    &:nth-child(2) {
+      animation-delay: 0.16s;
+    }
+    &:nth-child(3) {
+      animation-delay: 0.32s;
+    }
+  }
+
+  @keyframes bounce {
+    from {
+      transform: translateY(0);
+    }
+    to {
+      transform: translateY(-8px);
+    }
+  }
+`;
 
 function App() {
   const [file, setFile] = useState(null);
@@ -56,13 +86,10 @@ function App() {
 
     try {
       setUploadStatus("Uploading...");
-      const response = await fetch(
-        "https://ai-chatbot-g10o.onrender.com/upload",
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
+      const response = await fetch("http://localhost:8000/upload", {
+        method: "POST",
+        body: formData,
+      });
       const data = await response.json();
       if (response.ok) {
         setUploadStatus(data.message);
@@ -77,7 +104,7 @@ function App() {
 
   const clearDocument = async () => {
     try {
-      await fetch("https://ai-chatbot-g10o.onrender.com/clear", {
+      await fetch("http://localhost:8000/clear", {
         method: "POST",
       });
       setFile(null);
@@ -98,14 +125,11 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        "https://ai-chatbot-g10o.onrender.com/chat",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: userMessage }),
-        }
-      );
+      const response = await fetch("http://localhost:8000/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: userMessage }),
+      });
       const data = await response.json();
       setMessages((prev) => [
         ...prev,
@@ -126,7 +150,7 @@ function App() {
 
   const checkMode = async () => {
     try {
-      const response = await fetch("https://ai-chatbot-g10o.onrender.com/mode");
+      const response = await fetch("http://localhost:8000/mode");
       const data = await response.json();
       setIsDocumentMode(data.mode === "document");
     } catch (error) {
@@ -225,38 +249,27 @@ function App() {
                       maxWidth: "70%",
                       p: 2,
                       backgroundColor:
-                        msg.sender === "user" ? "#e3f2fd" : "#fff",
+                        msg.sender === "user" ? "#2196f3" : "#f5f5f5",
+                      color: msg.sender === "user" ? "white" : "inherit",
                     }}
                   >
-                    <ListItemText
-                      primary={
-                        <Typography variant="body1">{msg.text}</Typography>
-                      }
-                      secondary={
-                        <Box sx={{ mt: 1 }}>
-                          <Chip
-                            label={msg.sender === "user" ? "You" : "AI"}
-                            size="small"
-                            color={
-                              msg.sender === "user" ? "primary" : "secondary"
-                            }
-                            sx={{ mr: 1 }}
-                          />
-                          {msg.sender === "bot" && msg.mode && (
-                            <Chip
-                              label={
-                                msg.mode === "document" ? "Document" : "Chat"
-                              }
-                              size="small"
-                              color="info"
-                            />
-                          )}
-                        </Box>
-                      }
-                    />
+                    <ListItemText primary={msg.text} />
                   </Paper>
                 </ListItem>
               ))}
+              {loading && (
+                <ListItem sx={{ justifyContent: "flex-start", mb: 1 }}>
+                  <Paper
+                    sx={{ maxWidth: "70%", p: 2, backgroundColor: "#f5f5f5" }}
+                  >
+                    <LoadingAnimation>
+                      <span />
+                      <span />
+                      <span />
+                    </LoadingAnimation>
+                  </Paper>
+                </ListItem>
+              )}
               <div ref={messagesEndRef} />
             </List>
           </Box>
