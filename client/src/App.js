@@ -56,10 +56,13 @@ function App() {
 
     try {
       setUploadStatus("Uploading...");
-      const response = await fetch("http://localhost:8000/upload", {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        "https://ai-chatbot-g10o.onrender.com/upload",
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
       const data = await response.json();
       if (response.ok) {
         setUploadStatus(data.message);
@@ -74,7 +77,7 @@ function App() {
 
   const clearDocument = async () => {
     try {
-      await fetch("http://localhost:8000/clear", {
+      await fetch("https://ai-chatbot-g10o.onrender.com/clear", {
         method: "POST",
       });
       setFile(null);
@@ -95,11 +98,14 @@ function App() {
     setLoading(true);
 
     try {
-      const response = await fetch("http://localhost:8000/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: userMessage }),
-      });
+      const response = await fetch(
+        "https://ai-chatbot-g10o.onrender.com/chat",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: userMessage }),
+        }
+      );
       const data = await response.json();
       setMessages((prev) => [
         ...prev,
@@ -120,7 +126,7 @@ function App() {
 
   const checkMode = async () => {
     try {
-      const response = await fetch("http://localhost:8000/mode");
+      const response = await fetch("https://ai-chatbot-g10o.onrender.com/mode");
       const data = await response.json();
       setIsDocumentMode(data.mode === "document");
     } catch (error) {
