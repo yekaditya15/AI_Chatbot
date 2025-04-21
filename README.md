@@ -1,13 +1,10 @@
 # AI Chatbot with Document Processing
 
-<div align="center">
-  <video width="800" autoplay loop muted>
-    <source src="https://firebasestorage.googleapis.com/v0/b/portfolio-c5c0a.appspot.com/o/AI%20Assistant.mp4?alt=media&token=546923f1-2556-4e4d-816c-632ce9ef3519" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
-</div>
+[Watch AI Assistant Demo](https://firebasestorage.googleapis.com/v0/b/portfolio-c5c0a.appspot.com/o/AI%20Assistant.mp4?alt=media&token=546923f1-2556-4e4d-816c-632ce9ef3519)
+
 
 A full-stack AI chatbot application that combines document analysis and real-time web search capabilities. Built with FastAPI, React, and powered by Groq's LLM API.
+
 
 ## Features
 
