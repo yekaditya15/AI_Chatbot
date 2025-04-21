@@ -1,6 +1,11 @@
 # AI Chatbot with Document Processing
 
-https://github.com/yekaditya15/AI_Chatbot/blob/main/assests/AI%20Assistant.mp4
+<div align="center">
+  <video width="800" autoplay loop muted>
+    <source src="https://github.com/yekaditya15/AI_Chatbot/blob/main/assests/AI%20Assistant.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+</div>
 
 A full-stack AI chatbot application that combines document analysis and real-time web search capabilities. Built with FastAPI, React, and powered by Groq's LLM API.
 
