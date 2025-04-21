@@ -34,6 +34,7 @@ app = FastAPI()
 # Configure CORS
 origins = [
     "http://localhost:3000",
+    "http://localhost:3001",
     "https://aichatbot-six-tau.vercel.app"
 ]
 
@@ -61,16 +62,26 @@ MAX_CHUNKS = 30  # Reduced max chunks
 
 
 def initialize_llm():
+    """Initialize the LLM with proper error handling"""
     global llm
-    if llm is None:
+    try:
         groq_api_key = os.getenv("GROQ_API_KEY")
         if not groq_api_key:
             raise ValueError("GROQ_API_KEY not found in environment variables")
+
         llm = ChatGroq(
-            temperature=0.7,  # Higher temperature for more creative responses
+            temperature=0.7,
             groq_api_key=groq_api_key,
             model_name="llama-3.3-70b-versatile"
         )
+
+        # Test if LLM is properly initialized
+        if not llm:
+            raise ValueError("LLM initialization failed")
+
+    except Exception as e:
+        logger.error(f"LLM initialization error: {str(e)}")
+        raise
 
 
 def initialize_general_chat():
@@ -136,6 +147,14 @@ async def upload_file(file: UploadFile = File(...)):
     global qa_chain, chat_chain, memory, llm
 
     try:
+        # First ensure LLM is initialized
+        if llm is None:
+            initialize_llm()
+
+        # Initialize memory if not already done
+        if memory is None:
+            initialize_memory()
+
         # Stream file in chunks instead of loading entirely into memory
         file_size = 0
         text_content = ""
@@ -166,17 +185,35 @@ async def upload_file(file: UploadFile = File(...)):
         )
 
         # Create vector store with smaller batch size
-        vector_store = FAISS.from_texts(
-            texts,
-            embedding_model,
-            batch_size=16  # Smaller batch size
-        )
+        texts_batches = [texts[i:i + 16]
+                         # Create batches of 16
+                         for i in range(0, len(texts), 16)]
+        vector_store = None
 
-        # Configure QA chain with more efficient settings
+        for batch in texts_batches:
+            batch_vectorstore = FAISS.from_texts(
+                batch,
+                embedding_model
+            )
+
+            if vector_store is None:
+                vector_store = batch_vectorstore
+            else:
+                vector_store.merge_from(batch_vectorstore)
+
+        # Make sure LLM is properly initialized before creating QA chain
+        if not llm:
+            raise ValueError("LLM initialization failed")
+
+        # Configure QA chain
         qa_chain = ConversationalRetrievalChain.from_llm(
             llm=llm,
             retriever=vector_store.as_retriever(search_kwargs={"k": 2}),
-            memory=memory,
+            memory=ConversationBufferMemory(
+                memory_key="chat_history",
+                return_messages=True,
+                output_key="answer"  # Specify the output key
+            ),
             return_source_documents=True,
             verbose=False  # Reduce logging
         )
@@ -260,7 +297,9 @@ async def chat_endpoint(chat_request: ChatRequest):
                     "chat_history": memory.chat_memory.messages[-4:] if memory else []
                 })
 
-                answer = result.get("answer", "")
+                # Now we know it's specifically "answer"
+                answer = result["answer"]
+                source_docs = result.get("source_documents", [])
 
                 # Only search real-time if needed
                 if "don't find this information" in answer.lower():

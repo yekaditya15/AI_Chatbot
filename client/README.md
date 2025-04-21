@@ -1,70 +1,153 @@
-# Getting Started with Create React App
+# AI Chatbot with Document Processing
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+https://github.com/yourusername/yourrepo/assets/youruserid/demo.mp4
 
-## Available Scripts
+A full-stack AI chatbot application that combines document analysis and real-time web search capabilities. Built with FastAPI, React, and powered by Groq's LLM API.
 
-In the project directory, you can run:
+## Features
 
-### `npm start`
+- 📄 **Document Processing**: Upload and analyze PDF, DOCX, and TXT files
+- 💬 **Dual Chat Modes**:
+  - Document Q&A: Ask questions about uploaded documents
+  - General Chat: Get responses enhanced with real-time web search
+- 🔍 **Semantic Search**: Powered by FAISS and HuggingFace embeddings
+- 🌐 **Real-time Information**: Integration with DuckDuckGo search
+- 🚀 **Modern Stack**: FastAPI backend + React frontend
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Tech Stack
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+### Backend
 
-### `npm test`
+- FastAPI
+- LangChain
+- Groq LLM (llama-3.3-70b-versatile)
+- FAISS Vector Store
+- HuggingFace Embeddings (all-MiniLM-L6-v2)
+- DuckDuckGo Search API
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### Frontend
 
-### `npm run build`
+- React (Create React App)
+- Modern UI/UX design
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Getting Started
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### Prerequisites
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- Python 3.9+
+- Node.js 14+
+- Groq API key
 
-### `npm run eject`
+### Backend Setup
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+1. Navigate to server directory:
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+```bash
+cd server
+```
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+2. Create and activate virtual environment:
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
-## Learn More
+3. Install dependencies:
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+```bash
+pip install -r requirements.txt
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+4. Create `.env` file:
 
-### Code Splitting
+```
+GROQ_API_KEY=your-groq-api-key-here
+ALLOWED_ORIGINS=http://localhost:3000,your-production-domain
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+5. Run the server:
 
-### Analyzing the Bundle Size
+```bash
+uvicorn main:app --reload
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+### Frontend Setup
 
-### Making a Progressive Web App
+1. Navigate to client directory:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+```bash
+cd client
+```
 
-### Advanced Configuration
+2. Install dependencies:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+```bash
+npm install
+```
 
-### Deployment
+3. Start development server:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+```bash
+npm start
+```
 
-### `npm run build` fails to minify
+## Deployment
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+### Backend
+
+- Deployed on Render
+- Configuration in `render.yaml`
+
+### Frontend
+
+- Deployed on Vercel
+- Production build: `npm run build`
+
+## Features in Detail
+
+### Document Processing
+
+- File size limit: 5MB
+- Supported formats: PDF, DOCX, TXT
+- Efficient chunking for large documents
+- Semantic search capabilities
+
+### Chat Modes
+
+1. **Document Mode**
+
+   - Upload and analyze documents
+   - Ask questions about document content
+   - Semantic search for relevant answers
+
+2. **General Chat Mode**
+   - Natural conversation
+   - Real-time web search integration
+   - Enhanced responses with current information
+
+### Memory Management
+
+- Conversation history tracking
+- Efficient memory cleanup
+- Batch processing for large documents
+
+## API Endpoints
+
+- `/chat`: Process chat messages
+- `/upload`: Handle document uploads
+- `/mode`: Check current chat mode
+- `/clear`: Reset chat context
+- `/cleanup`: Memory management
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
