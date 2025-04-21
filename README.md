@@ -2,7 +2,7 @@
 
 <div align="center">
   <video width="800" autoplay loop muted>
-    <source src="https://github.com/yekaditya15/AI_Chatbot/blob/main/assests/AI%20Assistant.mp4" type="video/mp4">
+    <source src="https://firebasestorage.googleapis.com/v0/b/portfolio-c5c0a.appspot.com/o/AI%20Assistant.mp4?alt=media&token=546923f1-2556-4e4d-816c-632ce9ef3519" type="video/mp4">
     Your browser does not support the video tag.
   </video>
 </div>
